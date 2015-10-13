@@ -1,0 +1,34 @@
+[
+  {
+    'clientId': 'CLIENT_ID',
+    'creationDate': '2015-10-05T15:55:41.224Z',
+    'payload': {
+      'keyedHistograms': {
+        'SEARCH_COUNTS': {
+          'provider1': {
+            'sum': 6
+          }
+        }
+      },
+      'info': {
+        'reason': 'just because'
+      }
+    }
+   },
+  {
+    'clientId': 'CLIENT_ID',
+    'creationDate': '2015-10-05T15:55:41.224Z',
+    'payload': {
+      'keyedHistograms': {
+        'SEARCH_COUNTS': {
+          'provider-idle-daily': {
+            'sum': 6
+          }
+        }
+      },
+      'info': {
+        'reason': 'idle-daily'
+      }
+    }
+   },
+]
