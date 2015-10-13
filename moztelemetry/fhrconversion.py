@@ -39,7 +39,7 @@ def KeyError_returns_empty_list(f):
     >>> @KeyError_returns_empty_list
     ... def do():
     ...     x = {}['a']
-    ...     return x
+    ...     return "I won't print"
     ...
     >>> do()
     []
@@ -53,36 +53,42 @@ def KeyError_returns_empty_list(f):
 
 
 IDLE_DAILY = 'idle-daily'
-@KeyError_returns_empty_list
-def coalesce_by_date(v4_sequence, extractors=None):
+def ping_is_usable(v4, clientId):
+    if v4.get('clientId') != clientId:
+        msg = "ClientId conflict: '%s' and '%s'"
+        raise ValueError(msg % (v4.get('clientId'), clientId))
+    if v4.get('payload', {}).get('info', {}).get(
+            'reason', IDLE_DAILY) == IDLE_DAILY:
+        return False
+    return True
+
+
+def coalesce_by_date(v4_sequence, dimensions=None):
     '''
     Take an unordered sequence of v4 pings and convert to
     a dictionary keyed by strftime %Y-%m-%d whose values
     are a time-ordered list of pings, including fields via
-    the callables in extractors.
-
-    Be careful not to provoke a KeyError for reasons other than
-    data corruption.
+    the callables in dimensions
     '''
     if not v4_sequence:
         return []
-    results = defaultdict(dict) # This is $data$days
-    extractors = extractors or EXTRACTORS.keys()
-    clientId = v4_sequence[0]['clientId']
+    results = defaultdict(dict) # This will become $data$days
+    dimensions = dimensions or EXTRACTORS.keys()
+    clientId = v4_sequence[0].get('clientId')
+    if not clientId:
+        return []
 
-    for ping in v4_sequence:
-        if ping['clientId'] != clientId:
-            msg = "ClientId conflict: '%s' and '%s'"
-            raise ValueError(msg % (ping['clientId'], clientId))
-        if ping.get('payload', {}).get('info', {}).get(
-                'reason', IDLE_DAILY) == IDLE_DAILY:
+    for v4 in v4_sequence:
+        if not ping_is_usable(v4, clientId):
             continue
         try:
-            date = ping['creationDate'][:10]
+            date = v4.get('creationDate', '')[:10]
         except IndexError:
             continue
+        if len(date) < 10: # XXX try/except strptime
+            continue
         v2 = results[date]
-        for dimension in extractors:
+        for dimension in dimensions:
             f = EXTRACTORS[dimension]['function']
-            f(v2, ping)
+            f(v2, v4)
     return results
