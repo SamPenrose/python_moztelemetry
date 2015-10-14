@@ -7,6 +7,47 @@
         'SEARCH_COUNTS': {
           'provider1': {
             'sum': 6
+          },
+          'provider2': {
+            'sum': 2
+          },
+          'provider-no-sum': {
+            'rum': 7
+          }
+        }
+      },
+      'info': {
+        'reason': 'just because'
+      }
+    }
+   },
+  {
+    'clientId': 'CLIENT_ID',
+    # Missing 'creationDate': '2015-10-05T15:55:41.224Z',
+    'payload': {
+      'keyedHistograms': {
+        'SEARCH_COUNTS': {
+          'ping-missing-creationDate': {
+            'sum': 6
+          },
+          'provider1': {
+            'sum': 3
+          },
+        }
+      },
+      'info': {
+        'reason': 'just because'
+      }
+    }
+   },
+  {
+    'clientId': 'CLIENT_ID',
+    'creationDate': '2015',
+    'payload': {
+      'keyedHistograms': {
+        'SEARCH_COUNTS': {
+          'ping-short-creationDate': {
+            'sum': 6
           }
         }
       },
@@ -21,7 +62,7 @@
     'payload': {
       'keyedHistograms': {
         'SEARCH_COUNTS': {
-          'provider-idle-daily': {
+          'ping-idle-daily': {
             'sum': 6
           }
         }
