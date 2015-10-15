@@ -92,3 +92,42 @@ def coalesce_by_date(v4_sequence, dimensions=None):
             f = EXTRACTORS[dimension]['function']
             f(v2, v4)
     return results
+
+
+def make_ES_filter(key2whitelist, falseValue=None):
+    '''
+    Return a function which will test an "Exectuve Summary" blob returned
+    by spark.get_records() with the (key, whitelist) pairs, returning the
+    blob if it passes otherwise returning falseValue.
+
+    >>> f = make_ES_filter({'a': 1, 'b': [2, 3]}, [])
+    >>> f({'a': 1, 'b': 2})
+    {'a': 1, 'b': 2}
+    >>> f({'a': 1, 'b': 3})
+    {'a': 1, 'b': 3}
+    >>> f({'a': 1, 'b': 4})
+    []
+    >>> f({'a': 1, 'b': [2, 3]})
+    []
+    >>> f({'b': 3})
+    []
+    >>> f({'a': 1, 'b': 3, 'c': object()})
+    {'a': 1, 'c': <object object at 0x108725fe0>, 'b': 3}
+    '''
+    assert bool(falseValue) is False # Necessary to make this a filter
+    sentinel = object() # Never equal to a whitelist value
+    def filterer(d): # Don't mask builtin filter()
+        d = d.get('meta', d)
+        for key, whitelist in key2whitelist.items():
+            if not isinstance(whitelist, list) or \
+               isinstance(whitelist, tuple): # This is a bit fragile
+                whitelist = [whitelist]
+            passes = False
+            for value in whitelist:
+                if d.get(key, sentinel) == value:
+                    passes = True
+                    break
+            if not passes:
+                return falseValue
+        return d
+    return filterer
