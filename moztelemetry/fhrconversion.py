@@ -103,16 +103,14 @@ def make_ES_filter(key2whitelist, falseValue=None):
     >>> f = make_ES_filter({'a': 1, 'b': [2, 3]}, [])
     >>> f({'a': 1, 'b': 2})
     {'a': 1, 'b': 2}
-    >>> f({'a': 1, 'b': 3})
-    {'a': 1, 'b': 3}
+    >>> f({'a': 1, 'b': 3, 'c': object()}) # extra keys are ignored
+    {'a': 1, 'c': <object object at 0x108725fe0>, 'b': 3}
     >>> f({'a': 1, 'b': 4})
     []
     >>> f({'a': 1, 'b': [2, 3]})
     []
     >>> f({'b': 3})
     []
-    >>> f({'a': 1, 'b': 3, 'c': object()})
-    {'a': 1, 'c': <object object at 0x108725fe0>, 'b': 3}
     '''
     assert bool(falseValue) is False # Necessary to make this a filter
     sentinel = object() # Never equal to a whitelist value
