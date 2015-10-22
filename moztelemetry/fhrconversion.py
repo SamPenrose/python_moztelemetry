@@ -1,97 +1,63 @@
 '''
-Utility function(s) to convert between ping formats.
+Convert a subset of a V4 ping to a subset of a V2 ping.
+
+1) Define the subset we want.
+2) map to each ping:
+  - a validator that sees if we can use the ping
+  - an ordered set of extractors
+    + each of which returns a value for ','.join()
+3) filter() and dump to .csv
+4) write to temp table
+5) join/coalesce inside redshift
 '''
-from collections import defaultdict
+import datetime as DT
+import config
+import redshift as RED
+
+
+def get_search_provider(name): # XXX
+    name = name.lower()
+    for provider in config.SEARCH_PROVIDERS:
+        if provider in name:
+            return provider
+    return 'other'
+
+
+IDLE_DAILY = 'idle-daily'
+def ping_is_usable(v4):
+    if len(v4.get('clientId', '')) != 32: # UUID
+        # msg = "Bad clientId: '%s'"
+        return False
+    if v4.get('payload', {}).get('info', {}).get(
+            'reason', IDLE_DAILY) == IDLE_DAILY:
+        return False
+    if len(v4.get('creationDate')[:10]) != 10:
+        return False
+    return True
+
 
 V4_SEARCH_KEY_PATH = ('payload', 'keyedHistograms', 'SEARCH_COUNTS')
-def search_extractor(v2, v4):
+def search_extractor(v4):
+    if not ping_is_usable(v4):
+        return ''
+
+    # Create a CSV row with sensible defaults.
+    row = config.V4_SEARCH_PING_SCHEMA.copy() # a flat OrderedDict
+    for k in row:
+        row[k] = 0
+    row['clientId'] = v4['clientId']
+    row['active_date'] = v4['creationDate'][:10]
+
     v4_search_holder = v4
     for k in V4_SEARCH_KEY_PATH:
         v4_search_holder = v4_search_holder.get(k)
         if not v4_search_holder:
             return
-    v2_search_holder = v2
-    for key, constructor in EXTRACTORS['search']['path']:
-        if key not in v2_search_holder:
-            v2_search_holder[key] = defaultdict(constructor)
-        v2_search_holder = v2_search_holder[key]
-    for k in v4_search_holder: # XXX filter
+    for k in v4_search_holder:
         val = v4_search_holder[k].get('sum')
-        if val: # XXX 0 vs None
-            v2_search_holder[k] += val
-
-
-V2_SEARCH_KEY = 'org.mozilla.searches.counts'
-EXTRACTORS = {
-    'search': {
-        'function': search_extractor,
-        'path': ((V2_SEARCH_KEY, int),)
-    }
-}
-
-
-def KeyError_returns_empty_list(f):
-    '''
-    Decorator that consolidates key-checking.
-    XXX needs logging. The second object in the 3-tuple returned by
-    sys.exc_info() is the missing key.
-
-    >>> @KeyError_returns_empty_list
-    ... def do():
-    ...     x = {}['a']
-    ...     return "I won't print"
-    ...
-    >>> do()
-    []
-    '''
-    def wrapped(*a, **kw):
-        try:
-            return f(*a, **kw)
-        except KeyError:
-            return []
-    return wrapped
-
-
-IDLE_DAILY = 'idle-daily'
-def ping_is_usable(v4, clientId):
-    if v4.get('clientId') != clientId:
-        msg = "ClientId conflict: '%s' and '%s'"
-        raise ValueError(msg % (v4.get('clientId'), clientId))
-    if v4.get('payload', {}).get('info', {}).get(
-            'reason', IDLE_DAILY) == IDLE_DAILY:
-        return False
-    return True
-
-
-def coalesce_by_date(v4_sequence, dimensions=None):
-    '''
-    Take an unordered sequence of v4 pings and convert to
-    a dictionary keyed by strftime %Y-%m-%d whose values
-    are a time-ordered list of pings, including fields via
-    the callables in dimensions
-    '''
-    if not v4_sequence:
-        return []
-    results = defaultdict(dict) # This will become $data$days
-    dimensions = dimensions or EXTRACTORS.keys()
-    clientId = v4_sequence[0].get('clientId')
-    if not clientId:
-        return []
-
-    for v4 in v4_sequence:
-        if not ping_is_usable(v4, clientId):
-            continue
-        try:
-            date = v4.get('creationDate', '')[:10]
-        except IndexError:
-            continue
-        if len(date) < 10: # XXX try/except strptime
-            continue
-        v2 = results[date]
-        for dimension in dimensions:
-            f = EXTRACTORS[dimension]['function']
-            f(v2, v4)
-    return results
+        name = get_search_provider(k)
+        row[name] += val
+    return ','.join(row.values())
 
 
 def make_ES_filter(key2whitelist, falseValue=None):
@@ -129,3 +95,28 @@ def make_ES_filter(key2whitelist, falseValue=None):
                 return falseValue
         return d
     return filterer
+
+
+def get_executive_summary(**kw):
+    import spark
+    return spark.get_records(sc, 'telemetry-executive-summary', **kw)
+
+
+def tomorrow_string():
+    date = (DT.datetime.now() + DT.timedelta(1)).date()
+    return date.strftime(config.V4_DATE_FORMAT)
+
+
+def convert(fraction=0.1, channel='release', version=None):
+    '''
+    fraction: usual moztelemetry fraction of pings.
+    '''
+    import spark
+    ping_rdd = spark.get_pings(sc, fraction=fraction, channel=channel,
+                               version=version, doc_type='main')
+    # XXX bundle extractor and schema
+    ingester = RED.CSVIngester(ping_rdd, search_extractor)
+    ingester.do_map()
+    ingester.save_as_csv(config.S3_LOCATION)
+    exporter = RED.CSVExporter(ingester, config.V4_SEARCH_PING_SCHEMA) # XXX
+    exporter.export()
