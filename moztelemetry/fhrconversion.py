@@ -107,7 +107,7 @@ def tomorrow_string():
     return date.strftime(config.V4_DATE_FORMAT)
 
 
-def convert(fraction=0.1, channel='release', version=None):
+def convert(sc, fraction=0.1, channel='release', version=None):
     '''
     fraction: usual moztelemetry fraction of pings.
     '''

@@ -47,7 +47,7 @@ class CSVIngester(object):
         basename = 'v4-v2-conversion_tempfile-%s.csv' % stamp
         self.csv_path = pseudo_dir + basename
         log("Triggering save to CSV")
-        self.csv_rdd.saveToTextFile(self.csv_path)
+        self.csv_rdd.saveAsTextFile(self.csv_path)
 
 db = None
 class CSVExporter(object):
