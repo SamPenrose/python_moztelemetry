@@ -10,7 +10,7 @@ Convert a subset of a V4 ping to a subset of a V2 ping.
 4) write to temp table
 5) join/coalesce inside redshift
 '''
-import datetime as DT
+import datetime as DT, os
 import config
 import redshift as RED
 
@@ -112,8 +112,12 @@ def convert(sc, fraction=0.1, channel='release', version=None):
     fraction: usual moztelemetry fraction of pings.
     '''
     import spark
-    ping_rdd = spark.get_pings(sc, fraction=fraction, channel=channel,
-                               version=version, doc_type='main')
+     # XXX stable way of testing for not-AWS
+    if os.environ.get('V4_PINGS_TO_CONVERT'):
+        ping_rdd = sc.textFile('V4_PINGS_TO_CONVERT')
+    else:
+        ping_rdd = spark.get_pings(sc, fraction=fraction, channel=channel,
+                                   version=version, doc_type='main')
     # XXX bundle extractor and schema
     ingester = RED.CSVIngester(ping_rdd, search_extractor)
     ingester.do_map()
